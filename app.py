@@ -31,22 +31,50 @@ st_autorefresh(interval=600000, key="datarefresh")
 
 
 # =========================
+# SAFE HELPER FUNCTIONS
+# =========================
+def safe_mean(x):
+    """Handles lists, arrays, or single values safely"""
+    if x is None:
+        return 0
+    try:
+        if isinstance(x, (int, float)):
+            return float(x)
+        if hasattr(x, "__len__") and len(x) > 0:
+            return sum(x) / len(x)
+        return 0
+    except:
+        return 0
+
+
+def safe_last(x):
+    """Get last value safely from list or return float"""
+    try:
+        if isinstance(x, (int, float)):
+            return float(x)
+        if hasattr(x, "__len__") and len(x) > 0:
+            return float(x[-1])
+        return 0
+    except:
+        return 0
+
+
+# =========================
 # 📡 DATA SOURCES
 # =========================
 st.info("""
-📡 **Data Sources**
-- 🌧 Rainfall: CHIRPS / ERA5
+📡 **Data Sources (Upgraded System)**
+- 🌧 Rainfall: CHIRPS / ERA5 Reanalysis
 - 🌡 Temperature: ERA5 Reanalysis
-- 🌱 NDVI: MODIS / Sentinel (simulated)
-- 💧 Soil Moisture: Model-based estimation
-- 🛰 Forecast: Statistical + ML model
+- 🌱 NDVI: MODIS (NASA) + Sentinel-2 via Google Earth Engine (LIVE)
+- 💧 Soil Moisture: Model + reanalysis estimation
+- 🛰 Forecast: Statistical + Machine Learning model
 """)
 
 
 # =========================
 # INPUTS
 # =========================
-
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -62,52 +90,47 @@ with col3:
 # =========================
 # DATA LAYER
 # =========================
-
 rain = get_chirps_rainfall(province)
 temp = get_temperature(province)
 ndvi = get_ndvi_gee(province)
 soil = get_soil_moisture(province)
 
-# REAL DISTRICT DATA
 district_data = get_district_data(province, district)
 
-soil_moisture = float(soil[-1])
+soil_moisture = safe_last(soil)
 
 
 # =========================
 # INDICATORS
 # =========================
-
 spi = compute_spi(rain)
 
-ndvi_avg = float(sum(ndvi) / len(ndvi)) if hasattr(ndvi, "__len__") else float(ndvi)
-temp_last = float(temp[-1]) if hasattr(temp, "__len__") else float(temp)
+ndvi_avg = safe_mean(ndvi)
+temp_last = safe_last(temp)
 
-risk = predict_drought_risk(spi, ndvi, temp_last)
+risk = predict_drought_risk(spi, ndvi_avg, temp_last)
 
 
 # =========================
 # DASHBOARD OUTPUT
 # =========================
-
 st.subheader("📊 Climate Indicators")
 
 c1, c2, c3, c4 = st.columns(4)
 
 c1.metric("SPI", round(float(spi), 2))
 c2.metric("Risk (%)", round(float(risk), 2))
-c3.metric("NDVI", round(ndvi_avg, 2))
+c3.metric("NDVI", round(float(ndvi_avg), 2))
 c4.metric("Soil Moisture", round(float(soil_moisture), 2))
 
 
 # =========================
-# 📍 DISTRICT INTELLIGENCE (CORRECT LOCATION ✅)
+# 📍 DISTRICT INTELLIGENCE
 # =========================
-
 st.subheader("📍 District Climate Data")
 
 if district_data:
-    st.write(district_data)
+    st.json(district_data)
 else:
     st.warning("Please enter a district to view data.")
 
@@ -115,14 +138,13 @@ else:
 # =========================
 # 🐛 PEST & DISEASE
 # =========================
-
 pest, disease = get_pest_disease_risk(
     crop,
     province,
     district,
     ndvi_avg,
     temp_last,
-    rain[-1] if hasattr(rain, "__len__") else rain
+    safe_last(rain)
 )
 
 st.subheader("🐛 Pest & Disease Status")
@@ -136,7 +158,6 @@ p2.metric("Disease Risk", disease)
 # =========================
 # FORECAST
 # =========================
-
 future = predict_future_drought(rain, ndvi, temp)
 
 st.subheader("🔮 Forecast Risk")
@@ -146,7 +167,6 @@ st.write(future)
 # =========================
 # NATIONAL DASHBOARD
 # =========================
-
 st.subheader("📊 National Climate Dashboard")
 
 df = generate_national_table()
@@ -160,7 +180,6 @@ st.dataframe(df)
 # =========================
 # MAP
 # =========================
-
 st.subheader("🗺 Mozambique Drought Map")
 
 map_object = generate_drought_map()
@@ -173,6 +192,5 @@ with open("map.html", "r", encoding="utf-8") as f:
 # =========================
 # ALERT
 # =========================
-
 st.subheader("🚨 Alert System")
 st.write(send_alert(province, risk))

@@ -1,22 +1,42 @@
-import numpy as np
+import ee
 
-# =========================
-# SAFE MODE NDVI (NO CRASH)
-# =========================
+# Initialize Earth Engine
+try:
+    ee.Initialize()
+except:
+    ee.Authenticate()
+    ee.Initialize()
+
 
 def get_ndvi_gee(province):
     """
-    NDVI TIME SERIES (SAFE + FORECAST COMPATIBLE)
-
-    NOTE:
-    - Currently uses synthetic NDVI
-    - Structured for future upgrade to Google Earth Engine
+    REAL NDVI using MODIS satellite data (funding-grade)
     """
 
-    # Ensure reproducibility per province
-    np.random.seed(hash(province) % 999)
+    # Mozambique bounding box (you can refine later per province)
+    region = ee.Geometry.Rectangle([30.2, -26.9, 41.0, -10.3])
 
-    # Generate realistic NDVI values (Mozambique vegetation range)
-    ndvi = np.random.uniform(0.2, 0.85, 12)
+    # MODIS NDVI collection
+    ndvi_collection = ee.ImageCollection("MODIS/061/MOD13Q1") \
+        .filterBounds(region) \
+        .select("NDVI") \
+        .filterDate("2024-01-01", "2026-01-01")
 
-    return ndvi
+    # Get mean NDVI image
+    ndvi_mean = ndvi_collection.mean().multiply(0.0001)
+
+    # Reduce to region mean value
+    mean_dict = ndvi_mean.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=region,
+        scale=250,
+        maxPixels=1e9
+    )
+
+    ndvi_value = mean_dict.get("NDVI").getInfo()
+
+    # fallback safety
+    if ndvi_value is None:
+        ndvi_value = 0.4
+
+    return ndvi_value

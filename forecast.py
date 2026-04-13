@@ -1,50 +1,98 @@
 import numpy as np
 
 # =========================
-# SAFE FORECAST MODEL
+# SAFE UTILITY FUNCTIONS
+# =========================
+
+def safe_array(x):
+    """
+    Ensures input is always a numpy array
+    Handles: list, float, int, None
+    """
+    if x is None:
+        return np.array([0])
+
+    if isinstance(x, (int, float)):
+        return np.array([x])
+
+    try:
+        return np.array(x)
+    except:
+        return np.array([0])
+
+
+def safe_mean(x):
+    """
+    Safe mean for both scalars and arrays
+    """
+    x = safe_array(x)
+
+    if len(x) == 0:
+        return 0
+
+    return float(np.mean(x))
+
+
+def safe_last(x):
+    """
+    Safe last value extraction
+    """
+    x = safe_array(x)
+
+    if len(x) == 0:
+        return 0
+
+    return float(x[-1])
+
+
+# =========================
+# FORECAST MODEL (IMPROVED)
 # =========================
 
 def predict_future_drought(rain, ndvi, temp):
     """
-    Safe FAO-style drought forecast model
+    FAO-style drought forecasting model (robust version)
 
-    Fixes:
-    - handles float vs array errors
-    - ensures consistent time-series inputs
-    - prevents crash from slicing [-6:]
+    Handles:
+    - single values
+    - lists
+    - numpy arrays
+    - None values
     """
 
-    # =========================
-    # FORCE SAFE ARRAY CONVERSION
-    # =========================
-    rain = np.array(rain)
-    ndvi = np.array(ndvi)
-    temp = np.array(temp)
+    # Convert all inputs safely
+    rain = safe_array(rain)
+    ndvi = safe_array(ndvi)
+    temp = safe_array(temp)
 
     # =========================
-    # ENSURE MINIMUM LENGTH (IMPORTANT)
+    # TIME WINDOW (last 6 periods)
     # =========================
-    def safe_mean(x):
-        if len(x) == 0:
-            return 0
-        return np.mean(x[-6:])  # last 6 periods
+    rain_window = rain[-6:] if len(rain) > 6 else rain
+    ndvi_window = ndvi[-6:] if len(ndvi) > 6 else ndvi
+    temp_window = temp[-6:] if len(temp) > 6 else temp
 
-    rain_mean = safe_mean(rain)
-    ndvi_mean = safe_mean(ndvi)
-    temp_mean = safe_mean(temp)
+    rain_mean = safe_mean(rain_window)
+    ndvi_mean = safe_mean(ndvi_window)
+    temp_mean = safe_mean(temp_window)
 
     # =========================
-    # IMPROVED DROUGHT MODEL
+    # DROUGHT RISK MODEL
     # =========================
+    # Physical logic:
+    # - less rain → higher risk
+    # - low NDVI → higher risk
+    # - high temperature → higher risk
+
     trend = (
-        rain_mean * -0.3 +   # less rain = more drought risk
-        ndvi_mean * -50 +    # low vegetation = higher risk
-        temp_mean * 2        # high temperature = higher risk
+        (-0.35 * rain_mean) +
+        (-45.0 * ndvi_mean) +
+        (2.2 * temp_mean)
     )
 
     # =========================
-    # NORMALIZED OUTPUT (0–100)
+    # NORMALIZATION (0–100)
     # =========================
-    risk = 1 / (1 + np.exp(-trend / 20)) * 100
+    risk = 1 / (1 + np.exp(-trend / 18)) * 100
 
-    return float(max(0, min(100, risk)))
+    return round(float(max(0, min(100, risk))), 2)
